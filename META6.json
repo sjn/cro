@@ -27,6 +27,7 @@
         "web/index.html",
         "web/css/bootstrap.min.css",
         "web/css/cro.css",
+        "web/js/app.js",
         "fake-ssl/ca-crt.pem",
         "fake-ssl/server-crt.pem",
         "fake-ssl/server-key.pem"
