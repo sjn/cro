@@ -6,9 +6,98 @@ use Terminal::ANSIColor;
 proto MAIN(|) is export {*}
 
 multi MAIN('web', Str $host-port = '10203') {
-    use Cro::Tools::Web;
+    use Cro::HTTP::Router;
+    use Cro::HTTP::Server;
+    use Cro::HTTP::Router::WebSocket;
+    use JSON::Fast;
+
     my ($host, $port) = parse-host-port($host-port);
-    my $service = web $host, $port;
+
+    my $runner = Cro::Tools::Runner.new(
+        services => Cro::Tools::Services.new(base-path => $*CWD),
+    );
+
+    my $application = route {
+        get -> {
+            content 'text/html', %?RESOURCES<web/index.html>.slurp;
+        }
+        post -> 'stub', :$service-type is header, :$id is header, :$path is header {
+            # NYI
+        }
+        get -> 'templates' {
+            my @templates = get-available-templates();
+            my %data;
+            my @temp;
+            %data<templates> = ();
+            for @templates {
+                my %hash;
+                %hash<id> = .id;
+                %hash<name> = .name;
+                my @opts = .options.map({ (id => .id, name => .name, default => .default).Hash });
+                %hash<options> = @opts;
+                @temp.push(%hash);
+            }
+            %data<templates> = @temp;
+            content 'text/json', to-json(%data);
+        }
+        get -> 'events' {
+            web-socket -> $incoming {
+                supply {
+                    whenever $runner.run() {
+                        when Cro::Tools::Runner::Started {
+                            my @endpoints;
+                            my %endpoint-ports = .endpoint-ports;
+                            for .cro-file.endpoints -> $endpoint {
+                                my $port = %endpoint-ports{$endpoint.id};
+                                @endpoints.push({id => .service-id,
+                                                 name => .cro-file.name,
+                                                 :$port,
+                                                 protocol => $endpoint.protocol});
+                            }
+                            my %data = state => 'start',
+                                       endpoints => @endpoints;
+                            emit to-json(%data);
+                        }
+                        when Cro::Tools::Runner::Restarted {
+                            my %data = state => 'restart',
+                                       name => .cro-file.name,
+                                       service-id => .service-id;
+                            emit to-json(%data);
+                        }
+                        when Cro::Tools::Runner::Output {
+                            my %data = state => 'output',
+                                       message => .on-stderr ?? '' !! .line,
+                                       warning => .on-stderr ?? .line !! '';
+                            emit to-json(%data);
+                        }
+                        when Cro::Tools::Runner::Trace {
+                            # NYI
+                        }
+                    }
+                }
+            }
+        }
+        get -> 'css', *@path {
+            with %?RESOURCES{('web', 'css', |@path).join('/')} {
+                content 'text/css', .slurp;
+            }
+            else {
+                not-found;
+            }
+        }
+        get -> 'js', *@path {
+            with %?RESOURCES{('web', 'js', |@path).join('/')} {
+                content 'text/javascript', .slurp;
+            }
+            else {
+                not-found;
+            }
+        }
+    }
+    my $service = Cro::HTTP::Server.new(
+        :$host, :$port, :$application
+    );
+    $service.start;
     say "Cro web interface running at http://$host:$port/";
     stop-on-sigint($service);
 }
