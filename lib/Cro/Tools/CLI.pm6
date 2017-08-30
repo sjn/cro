@@ -78,19 +78,27 @@ multi MAIN('web', Str $host-port = '10203') {
             }
         }
         get -> 'css', *@path {
-            with %?RESOURCES{('web', 'css', |@path).join('/')} {
-                content 'text/css', .slurp;
-            }
-            else {
-                not-found;
+            my $path = ('web', 'css', |@path).join('/');
+            try {
+                CATCH {
+                    default {
+                        not-found;
+                    }
+                }
+                my $content = %?RESOURCES{$path}.slurp;
+                content 'text/css', $content;
             }
         }
         get -> 'js', *@path {
-            with %?RESOURCES{('web', 'js', |@path).join('/')} {
-                content 'text/javascript', .slurp;
-            }
-            else {
-                not-found;
+            my $path = ('web', 'js', |@path).join('/');
+            try {
+                CATCH {
+                    default {
+                        not-found;
+                    }
+                }
+                my $content = %?RESOURCES{$path}.slurp;
+                content 'text/javascript', $content;
             }
         }
     }
