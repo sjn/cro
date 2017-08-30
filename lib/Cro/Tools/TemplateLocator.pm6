@@ -28,15 +28,14 @@ sub get-available-templates(Supplier $warnings?) is export {
 
     my @templates;
     for @template-modules {
-        require ::($_);
+        try require ::($_);
+        if $! {
+            $warnings.emit(~$!) if $warnings;
+            next;
+        }
         given ::($_) {
             when Cro::Tools::Template {
                 push @templates, $_;
-            }
-        }
-        CATCH {
-            default {
-                $warnings.emit(~$_) if $warnings;
             }
         }
     }
